@@ -80,7 +80,7 @@ else
   else
     # Calculate commits ahead and behind
     BEHIND=$(git rev-list --count origin/"$current_branch"..origin/"$target_branch")
-    AHEAD=$(git rev-list --count origin/"$target_branch"..origin/"$current_branch"])
+    AHEAD=$(git rev-list --count origin/"$target_branch"..origin/"$current_branch")
 
     echo "commits_behind=$BEHIND" >> $GITHUB_OUTPUT
     echo "commits_ahead=$AHEAD" >> $GITHUB_OUTPUT

@@ -1,3 +1,5 @@
+name: Test Branch Comparison Action
+
 on:
   push:
     branches:

@@ -39,7 +39,7 @@ git config --global --add safe.directory "*" >&2
 # Validate target branch exists
 if ! git ls-remote --heads origin "$target_branch" | grep -q "$target_branch"; then
   echo "::error::Target branch '$target_branch' does not exist on remote" >&2
-  echo "::set-output name=error::Target branch does not exist" >&2
+  echo "error=Target branch does not exist" >> $GITHUB_OUTPUT
   exit 3
 fi
 
@@ -60,8 +60,8 @@ if [ "$current_sha" = "$target_sha" ]; then
   REASON="branches_identical"
   IS_UP_TO_DATE=true
   echo "RESULT: Branches are identical (pointing to the same commit)" >&2
-  echo "::set-output name=is_up_to_date::true" >&2
-  echo "::set-output name=reason::branches_identical" >&2
+  echo "is_up_to_date=true" >> $GITHUB_OUTPUT
+  echo "reason=branches_identical" >> $GITHUB_OUTPUT
   echo "::notice::Branches are identical - no update needed" >&2
 else
   # Find common ancestor for comparison
@@ -74,16 +74,16 @@ else
     REASON="target_contained_in_current"
     IS_UP_TO_DATE=true
     echo "RESULT: Target branch is fully contained in current branch" >&2
-    echo "::set-output name=is_up_to_date::true" >&2
-    echo "::set-output name=reason::target_contained_in_current" >&2
+    echo "is_up_to_date=true" >> $GITHUB_OUTPUT
+    echo "reason=target_contained_in_current" >> $GITHUB_OUTPUT
     echo "::notice::Target branch is already contained in current branch" >&2
   else
     # Calculate commits ahead and behind
     BEHIND=$(git rev-list --count origin/"$current_branch"..origin/"$target_branch")
-    AHEAD=$(git rev-list --count origin/"$target_branch"..origin/"$current_branch")
+    AHEAD=$(git rev-list --count origin/"$target_branch"..origin/"$current_branch"])
 
-    echo "::set-output name=commits_behind::$BEHIND" >&2
-    echo "::set-output name=commits_ahead::$AHEAD" >&2
+    echo "commits_behind=$BEHIND" >> $GITHUB_OUTPUT
+    echo "commits_ahead=$AHEAD" >> $GITHUB_OUTPUT
 
     echo "STATS: Current branch is behind by $BEHIND commits" >&2
     echo "STATS: Current branch is ahead by $AHEAD commits" >&2
@@ -104,8 +104,8 @@ else
         REASON="no_meaningful_changes"
         IS_UP_TO_DATE=true
         echo "RESULT: Merge check shows no conflicts or meaningful changes needed" >&2
-        echo "::set-output name=is_up_to_date::true" >&2
-        echo "::set-output name=reason::no_meaningful_changes" >&2
+        echo "is_up_to_date=true" >> $GITHUB_OUTPUT
+        echo "reason=no_meaningful_changes" >> $GITHUB_OUTPUT
         echo "::notice::No meaningful changes needed despite commit differences" >&2
       fi
       echo "::endgroup::" >&2
@@ -117,16 +117,16 @@ else
         RESULT="true"
         REASON="not_behind"
         echo "RESULT: Branch is up-to-date (not behind target)" >&2
-        echo "::set-output name=is_up_to_date::true" >&2
-        echo "::set-output name=reason::not_behind" >&2
+        echo "is_up_to_date=true" >> $GITHUB_OUTPUT
+        echo "reason=not_behind" >> $GITHUB_OUTPUT
         echo "::notice::Branch is up-to-date with target" >&2
       else
         RESULT="false"
         REASON="behind_target"
         EXIT_CODE=1
         echo "RESULT: Branch needs updating (behind target by $BEHIND commits)" >&2
-        echo "::set-output name=is_up_to_date::false" >&2
-        echo "::set-output name=reason::behind_target" >&2
+        echo "is_up_to_date=false" >> $GITHUB_OUTPUT
+        echo "reason=behind_target" >> $GITHUB_OUTPUT
         echo "::warning::Branch is behind target by $BEHIND commits and needs updating" >&2
       fi
     fi
@@ -140,7 +140,7 @@ echo "::endgroup::" >&2
 echo "$RESULT"
 
 # Set the final GitHub Actions outputs
-echo "::set-output name=result::$RESULT" >&2
-echo "::set-output name=reason::$REASON" >&2
+echo "result=$RESULT" >> $GITHUB_OUTPUT
+echo "reason=$REASON" >> $GITHUB_OUTPUT
 
 exit $EXIT_CODE

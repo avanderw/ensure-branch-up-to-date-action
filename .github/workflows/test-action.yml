@@ -2,16 +2,13 @@ name: Test Branch Comparison Action
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
   test-branch-comparison:
     name: Test Branch Comparison Logic
+    permissions: 
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

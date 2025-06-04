@@ -1,0 +1,100 @@
+name: 'Ensure Branch is Up-to-Date'
+description: 'Check if a branch is up-to-date with (or ahead of) a target branch'
+author: 'Your Organization'
+
+branding:
+  icon: 'git-branch'
+  color: 'green'
+
+inputs:
+  current-branch:
+    description: 'Branch to check (defaults to current branch if not specified)'
+    required: false
+    default: ''
+  target-branch:
+    description: 'Target branch to compare against (e.g., main, master)'
+    required: true
+  fail-if-behind:
+    description: 'Whether to fail the workflow if branch is behind target'
+    required: false
+    default: 'true'
+
+outputs:
+  is-up-to-date:
+    description: 'Whether the current branch is up-to-date with the target (true/false)'
+    value: ${{ steps.compare-branches.outputs.RESULTS }}
+  reason:
+    description: 'The reason for the result (e.g., branches_identical, behind_target)'
+    value: ${{ steps.compare-branches.outputs.reason }}
+  commits-behind:
+    description: 'Number of commits the current branch is behind the target'
+    value: ${{ steps.compare-branches.outputs.commits_behind }}
+  commits-ahead:
+    description: 'Number of commits the current branch is ahead of the target'
+    value: ${{ steps.compare-branches.outputs.commits_ahead }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Determine current branch
+      id: get-current-branch
+      shell: bash
+      run: |
+        # Mark repository as safe
+        git config --global --add safe.directory "*"
+        
+        # Use GitHub's environment variables when available
+        if [ -n "$GITHUB_HEAD_REF" ]; then
+          # We're in a pull request context
+          CURRENT_BRANCH="$GITHUB_HEAD_REF"
+        elif [ -n "$GITHUB_REF_NAME" ]; then
+          # We're in a push or other context
+          CURRENT_BRANCH="$GITHUB_REF_NAME"
+        else
+          # Fallback to git command
+          CURRENT_BRANCH=$(git branch --show-current)
+        fi
+        
+        echo "CURRENT_BRANCH=${CURRENT_BRANCH}" >> "${GITHUB_OUTPUT}"
+        echo "Current branch: ${CURRENT_BRANCH}"
+      
+    - name: Compare branches
+      id: compare-branches
+      shell: bash
+      run: |
+        # Make script executable
+        chmod +x ${GITHUB_ACTION_PATH}/src/branch-comparison.sh
+        
+        # Determine which branch to use (input or detected)
+        CURRENT_BRANCH="${{ inputs.current-branch != '' && inputs.current-branch || steps.get-current-branch.outputs.CURRENT_BRANCH }}"
+        TARGET_BRANCH="${{ inputs.target-branch }}"
+        
+        echo "Comparing '${CURRENT_BRANCH}' with target '${TARGET_BRANCH}'..."
+        
+        # Run comparison script
+        RESULTS=$(${GITHUB_ACTION_PATH}/src/branch-comparison.sh "$CURRENT_BRANCH" "$TARGET_BRANCH")
+        
+        # Capture the exit code to determine if branch is behind
+        COMPARISON_STATUS=$?
+        
+        # Store results in outputs
+        echo "RESULTS=${RESULTS}" >> "${GITHUB_OUTPUT}"
+        
+        # Output results to console
+        if [ "${RESULTS}" = "true" ]; then
+          echo "✅ Branch '${CURRENT_BRANCH}' is up-to-date with '${TARGET_BRANCH}'"
+        else
+          echo "⚠️ Branch '${CURRENT_BRANCH}' is behind '${TARGET_BRANCH}' and needs updating"
+        fi
+
+    - name: Validate branch status
+      if: ${{ inputs.fail-if-behind == 'true' }}
+      shell: bash
+      run: |
+        if [ "${{ steps.compare-branches.outputs.RESULTS }}" != "true" ]; then
+          echo "::error::Branch '${{ inputs.current-branch || steps.get-current-branch.outputs.CURRENT_BRANCH }}' is out of sync with '${{ inputs.target-branch }}'"
+          echo "::error::Please update your branch by merging or rebasing with the target branch"
+          exit 1
+        else
+          echo "Branch synchronization check passed"
+        fi

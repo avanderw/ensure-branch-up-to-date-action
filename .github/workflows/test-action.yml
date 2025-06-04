@@ -1,0 +1,167 @@
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test-branch-comparison:
+    name: Test Branch Comparison Logic
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git user
+        run: |
+          git config user.email "ci-bot@example.com"
+          git config user.name "CI Bot"
+          git config --global --add safe.directory "*"
+        shell: bash
+
+      - name: Create test branches
+        id: create-branches
+        run: |
+          echo "::group::Creating test branches"
+          
+          echo "Creating base branch from main..."
+          git checkout main
+          git checkout -b base-branch
+          echo "Base content" > base-file.txt
+          git add base-file.txt
+          git commit -m "Add base file"
+          git push --set-upstream origin base-branch
+          
+          echo "Creating identical branch..."
+          git checkout -b identical-branch
+          git push --set-upstream origin identical-branch
+          
+          echo "Creating ahead branch..."
+          git checkout identical-branch
+          git checkout -b ahead-branch
+          echo "Ahead content" > ahead-file.txt
+          git add ahead-file.txt
+          git commit -m "Add ahead file"
+          git push --set-upstream origin ahead-branch
+          
+          echo "Creating behind branch..."
+          git checkout base-branch
+          git reset --hard HEAD~1
+          git checkout -b behind-branch
+          git push --force --set-upstream origin behind-branch
+          
+          echo "Creating diverged branch..."
+          git checkout behind-branch
+          git checkout -b diverged-branch
+          echo "Diverged content" > diverged-file.txt
+          git add diverged-file.txt
+          git commit -m "Add diverged file"
+          git push --set-upstream origin diverged-branch
+          
+          echo "All test branches created successfully"
+          echo "::endgroup::"
+        shell: bash
+
+      - name: Test identical branches
+        id: identical-test
+        uses: ./
+        continue-on-error: true
+        with:
+          current-branch: 'identical-branch'
+          target-branch: 'base-branch'
+
+      - name: Test ahead branches
+        id: ahead-test
+        uses: ./
+        continue-on-error: true
+        with:
+          current-branch: 'ahead-branch'
+          target-branch: 'base-branch'
+
+      - name: Test behind branches
+        id: behind-test
+        uses: ./
+        continue-on-error: true
+        with:
+          current-branch: 'behind-branch'
+          target-branch: 'base-branch'
+
+      - name: Test diverged branches
+        id: diverged-test
+        uses: ./
+        continue-on-error: true
+        with:
+          current-branch: 'diverged-branch'
+          target-branch: 'base-branch'
+
+      - name: Validate test results
+        id: validate
+        run: |
+          echo "::group::Test Results Summary"
+          
+          # Create a summary table
+          echo "| Test Case | Expected | Actual | Result |"
+          echo "|-----------|----------|--------|--------|"
+          
+          # Identical branches
+          if [ "${{ steps.identical-test.outcome }}" == "success" ]; then
+            echo "| Identical branches | PASS | PASS | ✅ |"
+          else
+            echo "| Identical branches | PASS | FAIL | ❌ |"
+            FAILED=true
+          fi
+          
+          # Ahead branches
+          if [ "${{ steps.ahead-test.outcome }}" == "success" ]; then
+            echo "| Ahead branches | PASS | PASS | ✅ |"
+          else
+            echo "| Ahead branches | PASS | FAIL | ❌ |"
+            FAILED=true
+          fi
+          
+          # Behind branches
+          if [ "${{ steps.behind-test.outcome }}" == "failure" ]; then
+            echo "| Behind branches | FAIL | FAIL | ✅ |"
+          else
+            echo "| Behind branches | FAIL | PASS | ❌ |"
+            FAILED=true
+          fi
+          
+          # Diverged branches
+          if [ "${{ steps.diverged-test.outcome }}" == "failure" ]; then
+            echo "| Diverged branches | FAIL | FAIL | ✅ |"
+          else
+            echo "| Diverged branches | FAIL | PASS | ❌ |"
+            FAILED=true
+          fi
+          
+          echo ""
+          if [ "${FAILED}" == "true" ]; then
+            echo "❌ Some tests did not produce the expected results"
+            exit 1
+          else
+            echo "✅ All tests verified successfully!"
+          fi
+          echo "::endgroup::"
+        shell: bash
+
+      - name: Cleanup branches
+        if: always()
+        run: |
+          echo "::group::Cleaning up test branches"
+          
+          branches=("base-branch" "identical-branch" "ahead-branch" "behind-branch" "diverged-branch")
+          
+          for branch in "${branches[@]}"; do
+            echo "Deleting branch: $branch"
+            git push origin --delete "$branch" || echo "Failed to delete $branch (may not exist)"
+          done
+          
+          echo "Cleanup complete"
+          echo "::endgroup::"
+        shell: bash
